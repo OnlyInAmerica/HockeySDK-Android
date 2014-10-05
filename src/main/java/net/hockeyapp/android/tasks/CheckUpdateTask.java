@@ -4,19 +4,28 @@ import android.content.Context;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.provider.Settings;
+
 import net.hockeyapp.android.Constants;
 import net.hockeyapp.android.Tracking;
 import net.hockeyapp.android.UpdateManagerListener;
+import net.hockeyapp.android.utils.ConnectionManager;
 import net.hockeyapp.android.utils.VersionCache;
 import net.hockeyapp.android.utils.VersionHelper;
+
+import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.impl.client.DefaultHttpClient;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
 import java.lang.ref.WeakReference;
-import java.net.URL;
-import java.net.URLConnection;
 import java.net.URLEncoder;
 import java.util.Locale;
 
@@ -58,11 +67,11 @@ import java.util.Locale;
 public class CheckUpdateTask extends AsyncTask<Void, String, JSONArray>{
   private static final int MAX_NUMBER_OF_VERSIONS = 25;
 
-	protected static final String APK = "apk";
-	protected static final String INTENT_EXTRA_URL = "url";
-	protected static final String INTENT_EXTRA_JSON = "json";
+  protected static final String APK = "apk";
+  protected static final String INTENT_EXTRA_URL = "url";
+  protected static final String INTENT_EXTRA_JSON = "json";
 
-	protected String urlString = null;
+  protected String urlString = null;
   protected String appIdentifier = null;
 
   private Context context = null;
@@ -124,12 +133,11 @@ public class CheckUpdateTask extends AsyncTask<Void, String, JSONArray>{
       if ((getCachingEnabled()) && (findNewVersion(json, versionCode))) {
         return json;
       }
-      
-      URL url = new URL(getURLString("json"));
-      URLConnection connection = createConnection(url);
-      connection.connect();
 
-      InputStream inputStream = new BufferedInputStream(connection.getInputStream());
+      DefaultHttpClient httpClient = (DefaultHttpClient) ConnectionManager.getInstance(context).getHttpClient();
+      HttpResponse httpResponse = httpClient.execute(new HttpGet(getURLString("json")));
+
+      InputStream inputStream = new BufferedInputStream(httpResponse.getEntity().getContent());
       String jsonString = convertStreamToString(inputStream);
       inputStream.close();
       
@@ -144,16 +152,6 @@ public class CheckUpdateTask extends AsyncTask<Void, String, JSONArray>{
     }
     
     return null;
-  }
-
-  protected URLConnection createConnection(URL url) throws IOException {
-    URLConnection connection = url.openConnection();
-    connection.addRequestProperty("User-Agent", "HockeySDK/Android");
-    // connection bug workaround for SDK<=2.x
-    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.GINGERBREAD) {
-      connection.setRequestProperty("connection", "close");
-    }
-    return connection;
   }
 
   private boolean findNewVersion(JSONArray json, int versionCode) {
